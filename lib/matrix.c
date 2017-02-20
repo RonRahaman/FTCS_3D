@@ -3,6 +3,7 @@
 //
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 #include "matrix.h"
 
 double *** matrix_3d_alloc(int n) {
@@ -18,6 +19,19 @@ double *** matrix_3d_alloc(int n) {
   }
 
   return i_dim;
+}
+
+void gauss_3d_init(double ***density, int n, double dx, double mean, double var) {
+
+  for (int i = 0; i < n; i++)
+    for (int j = 0; j < n; j++)
+      for (int k = 0; k < n; k++) {
+        double x = i * dx;
+        double y = j * dx;
+        double z = k * dx;
+        density[i][j][k] = 1. / pow(2 * M_PI * var, 1.5) *
+                           exp(-1. * (pow(x - mean, 2) + pow(y - mean, 2) + pow(z - mean, 2)) / (2. * var));
+      }
 }
 
 void matrix_3d_free(double ***M) {
