@@ -22,7 +22,6 @@ double *** matrix_3d_alloc(int n) {
 }
 
 void gauss_3d_init(double ***density, int n, double dx, double mean, double var) {
-
   for (int i = 0; i < n; i++)
     for (int j = 0; j < n; j++)
       for (int k = 0; k < n; k++) {
@@ -34,36 +33,17 @@ void gauss_3d_init(double ***density, int n, double dx, double mean, double var)
       }
 }
 
-void matrix_3d_print(FILE *fp, double ***M, int n, int dim) {
-  switch (dim) {
-    case 0:
-      for (int j = 0; j < n; j++) {
-        for (int k = 0; k < n; k++) {
-          fprintf(fp, "%.3f ", M[n/2][j][k]);
-        }
-        fprintf(fp, "\n");
-      }
-      break;
-    case 1:
-      for (int i = 0; i < n; i++) {
-        for (int k = 0; k < n; k++) {
-          fprintf(fp, "%.333f ", M[i][n/2][k]);
-        }
-        fprintf(fp, "\n");
-      }
-      break;
-    case 2:
-      for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-          fprintf(fp, "%.3f ", M[i][j][n/2]);
-        }
-        fprintf(fp, "\n");
-      }
-      break;
-    default:
-      fprintf(stderr, "Must pass dim = 0, 1, or 2 to matrix_3d_print\n");
-      exit(EXIT_FAILURE);
-  }
+void matrix_3d_print(const char *fname, double ***M, int n) {
+  FILE *fp = fopen(fname, "wb+");
+  fwrite((const void *) &M[0][0][0], sizeof(double), (size_t ) n*n*n, fp);
+  fclose(fp);
+}
+
+void matrix_3d_print_slice(const char *fname, double ***M, int n) {
+  FILE *fp = fopen(fname, "wb+");
+  for (int j = 0; j < n; j++)
+    fwrite((const void *) &M[n/2][j][0], sizeof(double), (size_t ) n, fp);
+  fclose(fp);
 }
 
 void matrix_3d_free(double ***M) {
@@ -115,8 +95,5 @@ void gauss_3d_test(int n) {
 
   double ***M = matrix_3d_alloc(n);
   gauss_3d_init(M, n, dx, mean, var);
-
-  FILE *fp = fopen("/home/rahaman/scratch/gauss_out.txt", "w+");
-  matrix_3d_print(fp, M, n, 0);
-  fclose(fp);
+  matrix_3d_print_slice("/home/rahaman/scratch/gauss_out.bin", M, n);
 }
