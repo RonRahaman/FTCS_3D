@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[]) {
 
-  matrix_3d_test(2);
+  gauss_3d_test(25);
 
   return 0;
 }
