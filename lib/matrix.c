@@ -28,8 +28,8 @@ void gauss_3d_init(double ***density, int n, double dx, double mean, double var)
         double x = i * dx;
         double y = j * dx;
         double z = k * dx;
-        density[i][j][k] = 1. / pow(2 * M_PI * var, 1.5) *
-                           exp(-1. * (pow(x - mean, 2) + pow(y - mean, 2) + pow(z - mean, 2)) / (2. * var));
+        density[i][j][k] = 1. / pow(2 * M_PI * var, 1.5) /
+                           exp((pow(x - mean, 2) + pow(y - mean, 2) + pow(z - mean, 2)) / (2. * var));
       }
 }
 
