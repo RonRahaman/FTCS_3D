@@ -6,9 +6,17 @@
 #define FTCS_3D_MATRIX_H
 
 #include "stdio.h"
+// Allocates a nx by ny matrix with continuously-allocated columns
+double ** matrix_2d_alloc(int nx, int ny);
 
 // Allocates a continuous n*n*n matrix
 double *** matrix_3d_alloc(int n);
+
+// Initializes a Gaussian distribution in a 2D domain
+void matrix_2d_gauss_init(double **density, int nx, int ny, double dx, double dy, double mean, double var);
+
+// Frees a matrix as allocated by matrix_2d_alloc().
+void matrix_2d_free(double **M);
 
 // Fills 'density', an n*n*n matrix, with a 3D gaussian
 void gauss_3d_init(double ***density, int n, double dx, double mean, double var);

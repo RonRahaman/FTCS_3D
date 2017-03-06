@@ -6,6 +6,35 @@
 #include <math.h>
 #include "matrix.h"
 
+// Allocates a nx by ny matrix with continuously-allocated columns
+double ** matrix_2d_alloc(int nx, int ny) {
+
+  double *  ydim = (double *) malloc(nx * ny * sizeof(double));
+  double ** xdim = (double **) malloc(nx * sizeof(double *));
+
+  for(int i = 0; i < nx; i++)
+    xdim[i] = &ydim[i * ny];
+
+  return xdim;
+}
+
+// Initializes a Gaussian distribution in a 2D domain
+void matrix_2d_gauss_init(double **density, int nx, int ny, double dx, double dy, double mean, double var) {
+  for (int i = 0; i < nx; i++)
+    for (int j = 0; j < ny; j++) {
+      double x = i * dx;
+      double y = j * dy;
+      density[i][j] = 1. / pow(2 * M_PI * var, 1.5) /
+                      exp((pow(x - mean, 2) + pow(y - mean, 2)) / (2. * var));
+    }
+}
+
+// Frees a matrix as allocated by matrix_2d_alloc().
+void matrix_2d_free(double **M) {
+  free(M[0]);
+  free(M);
+}
+
 double *** matrix_3d_alloc(int n) {
   double *   k_dim = (double *)   malloc(n * n * n * sizeof(double));
   double **  j_dim = (double **)  malloc(n * n * sizeof(double *));
