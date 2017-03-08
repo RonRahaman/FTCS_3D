@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include "mpi.h"
 #include "matrix.h"
-#include "cart.h"
 
 int main (int argc, char *argv[]) {
   const int ndim = 2;
@@ -22,7 +21,7 @@ int main (int argc, char *argv[]) {
   int cart_coord[ndim];     // This proc's coordinates in the Cartesian communicator
   int cart_nbr[ndim][2];    // This proc's neighbors along each dimension
 
-  Grid_info global_grid[ndim], grid[ndim];
+  int global_ngrid[ndim], local_ngrid[ndim];
   MPI_Datatype edge[ndim];
 
   double ** M;
@@ -68,29 +67,29 @@ int main (int argc, char *argv[]) {
 
   // Set info about the global grid
   for (int i = 0; i < ndim; i++)
-    global_grid[i].n = global_grid_n;
+    global_ngrid[i] = global_grid_n;
 
   // Set info about the local (this proc's) grid
   for (int i = 0; i < ndim; i++)
-    grid[i].n = global_grid[i].n / cart_dim[i];
+    local_ngrid[i] = global_ngrid[i] / cart_dim[i];
 
   // Set up datatypes for rows and columns.
-  MPI_Type_contiguous(grid[1].n, MPI_DOUBLE, &edge[0]);
+  MPI_Type_contiguous(local_ngrid[1], MPI_DOUBLE, &edge[0]);
   MPI_Type_commit(&edge[0]);
 
-  MPI_Type_vector(grid[0].n, 1, grid[1].n + 2, MPI_DOUBLE, &edge[1]);
+  MPI_Type_vector(local_ngrid[0], 1, local_ngrid[1] + 2, MPI_DOUBLE, &edge[1]);
   MPI_Type_commit(&edge[1]);
 
-  M = matrix_2d_alloc(grid[0].n + 2, grid[1].n + 2);
+  M = matrix_2d_alloc(local_ngrid[0] + 2, local_ngrid[1] + 2);
 
   // ==============================================================================================
   // Set initial conditions
   // ==============================================================================================
-  for (int i = 0; i <= grid[0].n+1; i++)
-    for (int j = 0; j <= grid[1].n+1; j++)
+  for (int i = 0; i <= local_ngrid[0]+1; i++)
+    for (int j = 0; j <= local_ngrid[1]+1; j++)
       M[i][j] = -1;
-  for (int i = 1; i <= grid[0].n; i++)
-    for (int j = 1; j <= grid[1].n; j++)
+  for (int i = 1; i <= local_ngrid[0]; i++)
+    for (int j = 1; j <= local_ngrid[1]; j++)
       M[i][j] = cart_rank+1;
 
   // ==============================================================================================
@@ -100,25 +99,25 @@ int main (int argc, char *argv[]) {
   // ... on the -x edge
   if (cart_nbr[0][0] == MPI_PROC_NULL) {
     int i = 0;
-    for (int j = 0; j <= grid[1].n+1; j++)
+    for (int j = 0; j <= local_ngrid[1]+1; j++)
       M[i][j] = bound_val;
   }
   // ... on the +x edge
   if (cart_nbr[0][1] == MPI_PROC_NULL) {
-    int i = grid[0].n + 1;
-    for (int j = 0; j <= grid[1].n+1; j++)
+    int i = local_ngrid[0] + 1;
+    for (int j = 0; j <= local_ngrid[1]+1; j++)
       M[i][j] = bound_val;
   }
   // ... on the -y edge
   if (cart_nbr[1][0] == MPI_PROC_NULL) {
     int j = 0;
-    for (int i = 0; i <= grid[0].n+1; i++)
+    for (int i = 0; i <= local_ngrid[0]+1; i++)
       M[i][j] = bound_val;
   }
   // ... on the +y edge
   if (cart_nbr[1][1] == MPI_PROC_NULL) {
-    int j = grid[1].n + 1;
-    for (int i = 0; i <= grid[0].n+1; i++)
+    int j = local_ngrid[1] + 1;
+    for (int i = 0; i <= local_ngrid[0]+1; i++)
       M[i][j] = bound_val;
   }
 
@@ -137,8 +136,8 @@ int main (int argc, char *argv[]) {
       printf("Cart rank is %d\n", cart_rank);
       printf("Cart coords are [%d, %d]\n", cart_coord[0], cart_coord[1]);
       printf("Cart nbrs are [[%d, %d], [%d, %d]\n", cart_nbr[0][0], cart_nbr[0][1], cart_nbr[1][0], cart_nbr[1][1]);
-      for (int i = 0; i <= grid[0].n+1; i++) {
-        for (int j = 0; j <= grid[1].n+1; j++) {
+      for (int i = 0; i <= local_ngrid[0]+1; i++) {
+        for (int j = 0; j <= local_ngrid[1]+1; j++) {
           printf("%2.0f ", M[i][j]);
         }
         printf("\n");
@@ -156,13 +155,13 @@ int main (int argc, char *argv[]) {
   // ... in the +x direction
   {
     double *sendbuf = &M[1][1];
-    double *recvbuf = &M[grid[0].n + 1][1];
+    double *recvbuf = &M[local_ngrid[0] + 1][1];
     MPI_Sendrecv(sendbuf, 1, edge[0], cart_nbr[0][0], 99, recvbuf, 1, edge[0], cart_nbr[0][1], 99,
                  cart_comm, MPI_STATUS_IGNORE);
   }
   // ... in the -x direction
   {
-    double *sendbuf = &M[grid[0].n][1];
+    double *sendbuf = &M[local_ngrid[0]][1];
     double *recvbuf = &M[0][1];
     MPI_Sendrecv(sendbuf, 1, edge[0], cart_nbr[0][1], 99, recvbuf, 1, edge[0], cart_nbr[0][0], 99,
                  cart_comm, MPI_STATUS_IGNORE);
@@ -170,13 +169,13 @@ int main (int argc, char *argv[]) {
   // ... in the -y direction
   {
     double *sendbuf = &M[1][1];
-    double *recvbuf = &M[1][grid[1].n+1];
+    double *recvbuf = &M[1][local_ngrid[1]+1];
     MPI_Sendrecv(sendbuf, 1, edge[1], cart_nbr[1][0], 99, recvbuf, 1, edge[1], cart_nbr[1][1], 99,
                  cart_comm, MPI_STATUS_IGNORE);
   }
   // ... in the +y direction
   {
-    double *sendbuf = &M[1][grid[1].n];
+    double *sendbuf = &M[1][local_ngrid[1]];
     double *recvbuf = &M[1][0];
     MPI_Sendrecv(sendbuf, 1, edge[1], cart_nbr[1][1], 99, recvbuf, 1, edge[1], cart_nbr[1][0], 99,
                  cart_comm, MPI_STATUS_IGNORE);
@@ -197,8 +196,8 @@ int main (int argc, char *argv[]) {
       printf("Cart rank is %d\n", cart_rank);
       printf("Cart coords are [%d, %d]\n", cart_coord[0], cart_coord[1]);
       printf("Cart nbrs are [[%d, %d], [%d, %d]\n", cart_nbr[0][0], cart_nbr[0][1], cart_nbr[1][0], cart_nbr[1][1]);
-      for (int i = 0; i <= grid[0].n+1; i++) {
-        for (int j = 0; j <= grid[1].n+1; j++) {
+      for (int i = 0; i <= local_ngrid[0]+1; i++) {
+        for (int j = 0; j <= local_ngrid[1]+1; j++) {
           printf("%2.0f ", M[i][j]);
         }
         printf("\n");
@@ -223,11 +222,11 @@ int main (int argc, char *argv[]) {
   int subarray_mem_starts[ndim];
 
   for (int i = 0; i < ndim; i++) {
-    global_array_sizes[i] = global_grid[i].n;
-    memarray_sizes[i] = grid[i].n + 2;
+    global_array_sizes[i] = global_ngrid[i];
+    memarray_sizes[i] = local_ngrid[i] + 2;
 
-    subarray_sizes[i] = grid[i].n;
-    subarray_global_starts[i] = cart_coord[i] * grid[i].n;
+    subarray_sizes[i] = local_ngrid[i];
+    subarray_global_starts[i] = cart_coord[i] * local_ngrid[i];
     subarray_mem_starts[i] = 1;
   }
 
