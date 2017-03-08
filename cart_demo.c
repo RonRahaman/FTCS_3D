@@ -213,32 +213,28 @@ int main (int argc, char *argv[]) {
   // ==============================================================================================
 
   MPI_File fh;
-  MPI_Datatype filetype, memtype;
-  int global_array_sizes[ndim];
-  int memarray_sizes[ndim];
+  MPI_Datatype io_filemap, io_memmap;
+  int mem_ngrid[ndim];
 
-  int subarray_sizes[ndim];
-  int subarray_global_starts[ndim];
-  int subarray_mem_starts[ndim];
+  int local_filestarts[ndim];
+  int local_memstarts[ndim];
 
   for (int i = 0; i < ndim; i++) {
-    global_array_sizes[i] = global_ngrid[i];
-    memarray_sizes[i] = local_ngrid[i] + 2;
+    mem_ngrid[i] = local_ngrid[i] + 2;
 
-    subarray_sizes[i] = local_ngrid[i];
-    subarray_global_starts[i] = cart_coord[i] * local_ngrid[i];
-    subarray_mem_starts[i] = 1;
+    local_filestarts[i] = cart_coord[i] * local_ngrid[i];
+    local_memstarts[i] = 1;
   }
 
-  MPI_Type_create_subarray(ndim, global_array_sizes, subarray_sizes, subarray_global_starts, MPI_ORDER_C, MPI_DOUBLE, &filetype);
-  MPI_Type_commit(&filetype);
+  MPI_Type_create_subarray(ndim, global_ngrid, local_ngrid, local_filestarts, MPI_ORDER_C, MPI_DOUBLE, &io_filemap);
+  MPI_Type_commit(&io_filemap);
 
-  MPI_Type_create_subarray(ndim, memarray_sizes, subarray_sizes, subarray_mem_starts, MPI_ORDER_C, MPI_DOUBLE, &memtype);
-  MPI_Type_commit(&memtype);
+  MPI_Type_create_subarray(ndim, mem_ngrid, local_ngrid, local_memstarts, MPI_ORDER_C, MPI_DOUBLE, &io_memmap);
+  MPI_Type_commit(&io_memmap);
 
   MPI_File_open(MPI_COMM_WORLD, outfile, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
-  MPI_File_set_view(fh, 0, MPI_DOUBLE, filetype, "native", MPI_INFO_NULL);
-  MPI_File_write_all(fh, &M[0][0], 1, memtype, MPI_STATUS_IGNORE);
+  MPI_File_set_view(fh, 0, MPI_DOUBLE, io_filemap, "native", MPI_INFO_NULL);
+  MPI_File_write_all(fh, &M[0][0], 1, io_memmap, MPI_STATUS_IGNORE);
 
 
   MPI_Finalize();
