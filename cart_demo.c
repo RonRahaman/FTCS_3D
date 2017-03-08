@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "cart.h"
 #include "mpi.h"
 #include "matrix.h"
 #include "cart.h"
@@ -12,6 +11,7 @@
 int main (int argc, char *argv[]) {
   const int ndim = 2;
   const int global_grid_n = 12;
+  const double bound_val = 0.0;
 
   int world_rank, world_size;      // The rank, size in MPI_COMM_WORLD
 
@@ -81,8 +81,11 @@ int main (int argc, char *argv[]) {
   MPI_Type_vector(grid[0].n, 1, grid[1].n + 2, MPI_DOUBLE, &edge[1]);
   MPI_Type_commit(&edge[1]);
 
-  // Dummy initializations
   M = matrix_2d_alloc(grid[0].n + 2, grid[1].n + 2);
+
+  // ==============================================================================================
+  // Set initial conditions
+  // ==============================================================================================
   for (int i = 0; i <= grid[0].n+1; i++)
     for (int j = 0; j <= grid[1].n+1; j++)
       M[i][j] = -1;
@@ -90,8 +93,38 @@ int main (int argc, char *argv[]) {
     for (int j = 1; j <= grid[1].n; j++)
       M[i][j] = cart_rank+1;
 
-  // Set boundary conditions...
-  set_2d_cart_bounds(M, grid, cart_nbr, 0.0);
+  // ==============================================================================================
+  // Set boundary conditions
+  // ==============================================================================================
+
+  // ... on the -x edge
+  if (cart_nbr[0][0] == MPI_PROC_NULL) {
+    int i = 0;
+    for (int j = 0; j <= grid[1].n+1; j++)
+      M[i][j] = bound_val;
+  }
+  // ... on the +x edge
+  if (cart_nbr[0][1] == MPI_PROC_NULL) {
+    int i = grid[0].n + 1;
+    for (int j = 0; j <= grid[1].n+1; j++)
+      M[i][j] = bound_val;
+  }
+  // ... on the -y edge
+  if (cart_nbr[1][0] == MPI_PROC_NULL) {
+    int j = 0;
+    for (int i = 0; i <= grid[0].n+1; i++)
+      M[i][j] = bound_val;
+  }
+  // ... on the +y edge
+  if (cart_nbr[1][1] == MPI_PROC_NULL) {
+    int j = grid[1].n + 1;
+    for (int i = 0; i <= grid[0].n+1; i++)
+      M[i][j] = bound_val;
+  }
+
+  // ==============================================================================================
+  // Print subdomains before neighbor exchange
+  // ==============================================================================================
 
   for (int k = 0; k < cart_size; k++) {
     if (cart_rank == k) {
@@ -116,7 +149,10 @@ int main (int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
   }
 
-  // Do the ghost-cell exchanges ...
+  // ==============================================================================================
+  // Neighbor exchanges
+  // ==============================================================================================
+
   // ... in the +x direction
   {
     double *sendbuf = &M[1][1];
@@ -146,6 +182,10 @@ int main (int argc, char *argv[]) {
                  cart_comm, MPI_STATUS_IGNORE);
   }
 
+  // ==============================================================================================
+  // Print subdomain after neighbor exchange
+  // ==============================================================================================
+
   for (int k = 0; k < cart_size; k++) {
     if (cart_rank == k) {
       if (k == 0) {
@@ -169,7 +209,10 @@ int main (int argc, char *argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
   }
 
-  // Do the I/O
+  // ==============================================================================================
+  // Output everyone's subdomains to file
+  // ==============================================================================================
+
   MPI_File fh;
   MPI_Datatype filetype, memtype;
   int global_array_sizes[ndim];
