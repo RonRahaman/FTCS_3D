@@ -27,6 +27,8 @@ int main (int argc, char *argv[]) {
 
   double ** M;
 
+  const char outfile[] = "cart_demo.out";
+
   MPI_Init(&argc, &argv);
 
   // Get info about COMM_WORLD
@@ -166,6 +168,36 @@ int main (int argc, char *argv[]) {
     }
     MPI_Barrier(MPI_COMM_WORLD);
   }
+
+  // Do the I/O
+  MPI_File fh;
+  MPI_Datatype filetype, memtype;
+  int global_array_sizes[ndim];
+  int memarray_sizes[ndim];
+
+  int subarray_sizes[ndim];
+  int subarray_global_starts[ndim];
+  int subarray_mem_starts[ndim];
+
+  for (int i = 0; i < ndim; i++) {
+    global_array_sizes[i] = global_grid[i].n;
+    memarray_sizes[i] = grid[i].n + 2;
+
+    subarray_sizes[i] = grid[i].n;
+    subarray_global_starts[i] = cart_coord[i] * grid[i].n;
+    subarray_mem_starts[i] = 1;
+  }
+
+  MPI_Type_create_subarray(ndim, global_array_sizes, subarray_sizes, subarray_global_starts, MPI_ORDER_C, MPI_DOUBLE, &filetype);
+  MPI_Type_commit(&filetype);
+
+  MPI_Type_create_subarray(ndim, memarray_sizes, subarray_sizes, subarray_mem_starts, MPI_ORDER_C, MPI_DOUBLE, &memtype);
+  MPI_Type_commit(&memtype);
+
+  MPI_File_open(MPI_COMM_WORLD, outfile, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
+  MPI_File_set_view(fh, 0, MPI_DOUBLE, filetype, "native", MPI_INFO_NULL);
+  MPI_File_write_all(fh, &M[0][0], 1, memtype, MPI_STATUS_IGNORE);
+
 
   MPI_Finalize();
 }
