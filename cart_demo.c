@@ -4,10 +4,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "grid.h"
+#include "cart.h"
 #include "mpi.h"
 #include "matrix.h"
-#include "grid.h"
+#include "cart.h"
 
 int main (int argc, char *argv[]) {
   const int ndim = 2;
