@@ -7,6 +7,7 @@
 #include "grid.h"
 #include "mpi.h"
 #include "matrix.h"
+#include "grid.h"
 
 int main (int argc, char *argv[]) {
   const int ndim = 2;
@@ -88,31 +89,7 @@ int main (int argc, char *argv[]) {
       M[i][j] = cart_rank+1;
 
   // Set boundary conditions...
-  // ... on the -x edge
-  if (cart_nbr[0][0] == MPI_PROC_NULL) {
-    int i = 0;
-    for (int j = 0; j <= grid[1].n+1; j++)
-      M[i][j] = 0.0;
-  }
-  // ... on the +x edge
-  if (cart_nbr[0][1] == MPI_PROC_NULL) {
-    int i = grid[0].n + 1;
-    for (int j = 0; j <= grid[1].n+1; j++)
-      M[i][j] = 0.0;
-  }
-  // ... on the -y edge
-  if (cart_nbr[1][0] == MPI_PROC_NULL) {
-    int j = 0;
-    for (int i = 0; i <= grid[0].n+1; i++)
-      M[i][j] = 0.0;
-  }
-  // ... on the +y edge
-  if (cart_nbr[1][1] == MPI_PROC_NULL) {
-    int j = grid[1].n + 1;
-    for (int i = 0; i <= grid[0].n+1; i++)
-      M[i][j] = 0.0;
-  }
-
+  set_2d_cart_bounds(M, grid, cart_nbr, 0.0);
 
   for (int k = 0; k < cart_size; k++) {
     if (cart_rank == k) {

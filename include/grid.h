@@ -12,4 +12,6 @@ typedef struct _grid_info{
   double del;
 } Grid_info;
 
+void  set_2d_cart_bounds(double ** domain, Grid_info grid[], int neighbors[][2], double bound_val);
+
 #endif //FTCS_3D_GRID_H
