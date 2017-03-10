@@ -1,36 +1,44 @@
+// ************************************************************************************************
+// Demonstrates common tasks with an MPI cartesian communicator, including:
+//   * Using MPI_Cart_create to create the communicator
+//   * Setting up MPI_Datatypes for ghost cells
+//   * Using MPI_Sendrecv for ghost-cell exchanges
+//   * Usin MPI parallel I/O to output results
 //
-// Created by Ron Rahaman on 3/6/17.
-//
+// R. Rahaman, 2017
+// ************************************************************************************************
 
 #include <stdio.h>
-#include <stdlib.h>
 #include "mpi.h"
 #include "matrix.h"
 
 int main (int argc, char *argv[]) {
-  const int ndim = 2;
-  const int global_grid_n = 12;
-  const double bound_val = 0.0;
+  const int ndim = 2;            // Number of spatial dimensions
+  const double bound_val = 0.0;  // Boundary values
 
-  int world_rank, world_size;      // The rank, size in MPI_COMM_WORLD
+  const int ngrid = 12;          // Number of gridpoints in each dimension of global domain
+  int global_ngrid[ndim];        // Number of gridpoints in each dimension of global domain
+  int local_ngrid[ndim];         // Number of gridpoints in each dimension of this proc's subdomain
 
-  MPI_Comm cart_comm;       // The cartesian communicator
-  int cart_rank, cart_size; // Size, rank in the cartesian communicator
-  int cart_period[ndim];    // Not using periodic boundary conditions in Cartesian communicator
-  int cart_dim[ndim];       // The dimensions of the Cartesian communicator
-  int cart_coord[ndim];     // This proc's coordinates in the Cartesian communicator
-  int cart_nbr[ndim][2];    // This proc's neighbors along each dimension
+  int world_rank, world_size;    // The rank, size in MPI_COMM_WORLD
 
-  int global_ngrid[ndim], local_ngrid[ndim];
-  MPI_Datatype edge[ndim];
+  MPI_Comm cart_comm;            // The cartesian communicator
+  int cart_rank, cart_size;      // Size, rank in the cartesian communicator
+  int cart_dim[ndim];            // The dimensions of the Cartesian communicator
+  int cart_coord[ndim];          // This proc's coordinates in the Cartesian communicator
+  int cart_nbr[ndim][2];         // This proc's neighbors along each dimension
 
-  double ** M;
+  MPI_Datatype edge[ndim];       // Datatypes for memory along the edges of the subdomain
 
-  const char outfile[] = "cart_demo.out";
+  double ** M;                   // The subdomain itself
+
+  // ==============================================================================================
+  // Setup the communicators (including Cartesian communicator)
+  // ==============================================================================================
 
   MPI_Init(&argc, &argv);
 
-  // Get info about COMM_WORLD
+  // Get info about MPI_COMM_WORLD
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
@@ -39,52 +47,61 @@ int main (int argc, char *argv[]) {
     cart_dim[i] = 0;
   MPI_Dims_create(world_size, ndim, cart_dim);
 
-  // Creates the communicator
-  int reorder = 1;                          // Means MPI is allowed to reorder ranks in Cart comm
-  for (int i = 0; i < ndim; i++)
-    cart_period[i] = 0;                     // Means we're not using periodic bounds
-  MPI_Cart_create(MPI_COMM_WORLD, ndim, cart_dim, cart_period, reorder, &cart_comm);
+  // Creates the Cartesian communicator
+  {
+    int reorder = 1;          // Means MPI is allowed to reorder ranks in Cart comm
+    int cart_period[ndim];    // Means we aren't using periodic boundary conditions in Cartesian communicator
+    for (int i = 0; i < ndim; i++)
+      cart_period[i] = 0;
+    MPI_Cart_create(MPI_COMM_WORLD, ndim, cart_dim, cart_period, reorder, &cart_comm);
+  }
 
-  // Get basic info about the new communicator
+  // Get info about the new Cart comm
   MPI_Comm_rank(cart_comm, &cart_rank);
   MPI_Comm_size(cart_comm, &cart_size);
-
-  // Get the location and neighbors of this proc in the Cartesian communicator
   MPI_Cart_coords(cart_comm, cart_rank, ndim, cart_coord);
   for (int i = 0; i < ndim; i++)
     MPI_Cart_shift(cart_comm, i, 1, &cart_nbr[i][0], &cart_nbr[i][1]);
 
+  // Ensure that the number of gridpoints are evenly-divisible by the Cart comm
   if (world_rank == 0) {
-
-    // Check consistency w/ cart comm
     printf("The Cartesian communicator is %d x %d procs\n", cart_dim[0], cart_dim[1]);
-    printf("The spatial domain is %d x %d gripoints\n", global_grid_n, global_grid_n);
-    if (global_grid_n % cart_dim[0] != 0 || global_grid_n % cart_dim[1] != 0) {
+    printf("The spatial domain is %d x %d gripoints\n", ngrid, ngrid);
+    if (ngrid % cart_dim[0] != 0 || ngrid % cart_dim[1] != 0) {
       fprintf(stderr, "ERROR: The number of gridpoints are not evenly divisible by the number of processes\n");
       MPI_Abort(MPI_COMM_WORLD, MPI_ERR_DIMS);
     }
   }
 
-  // Set info about the global grid
-  for (int i = 0; i < ndim; i++)
-    global_ngrid[i] = global_grid_n;
+  // ==============================================================================================
+  // Setup the spatial grids
+  // ==============================================================================================
 
-  // Set info about the local (this proc's) grid
+  // Info about the global grid
+  for (int i = 0; i < ndim; i++)
+    global_ngrid[i] = ngrid;
+
+  // Info about the local grid
   for (int i = 0; i < ndim; i++)
     local_ngrid[i] = global_ngrid[i] / cart_dim[i];
 
-  // Set up datatypes for rows and columns.
+  // Malloc the local grid
+  M = matrix_2d_alloc(local_ngrid[0] + 2, local_ngrid[1] + 2);
+
+  // ==============================================================================================
+  // Initialize datatypes
+  // ==============================================================================================
+
   MPI_Type_contiguous(local_ngrid[1], MPI_DOUBLE, &edge[0]);
   MPI_Type_commit(&edge[0]);
 
   MPI_Type_vector(local_ngrid[0], 1, local_ngrid[1] + 2, MPI_DOUBLE, &edge[1]);
   MPI_Type_commit(&edge[1]);
 
-  M = matrix_2d_alloc(local_ngrid[0] + 2, local_ngrid[1] + 2);
-
   // ==============================================================================================
   // Set initial conditions
   // ==============================================================================================
+
   for (int i = 0; i <= local_ngrid[0]+1; i++)
     for (int j = 0; j <= local_ngrid[1]+1; j++)
       M[i][j] = -1;
@@ -211,31 +228,45 @@ int main (int argc, char *argv[]) {
   // ==============================================================================================
   // Output everyone's subdomains to file
   // ==============================================================================================
+  // This is based on examples from "Using Advanced MPI", Chapter 7.
 
-  MPI_File fh;
-  MPI_Datatype io_filemap, io_memmap;
-  int mem_ngrid[ndim];
-
-  int local_filestarts[ndim];
-  int local_memstarts[ndim];
+  const char outfile[] = "cart_demo.out";     // Filename
+  MPI_File fh;                                // Filehandle
+  MPI_Datatype io_filemap, io_memmap;         // Datatypes for mapping subdomain to file, memory layout
+  int mem_ngrid[ndim];                        // Number of gridpoints in memory layout (incl. ghost cells)
+  int local_filestarts[ndim];                 // Starting coordinates of subdomain in file
+  int local_memstarts[ndim];                  // Starting coordinates of subdomain in memory layout
 
   for (int i = 0; i < ndim; i++) {
-    mem_ngrid[i] = local_ngrid[i] + 2;
-
-    local_filestarts[i] = cart_coord[i] * local_ngrid[i];
-    local_memstarts[i] = 1;
+    mem_ngrid[i] = local_ngrid[i] + 2;                     // We have one ghost cell on each side
+    local_filestarts[i] = cart_coord[i] * local_ngrid[i];  // Subdomain begins at this point in the file
+    local_memstarts[i] = 1;                                // Subdomain begins at this point in memory
   }
 
+  // Maps subdomain to file view
   MPI_Type_create_subarray(ndim, global_ngrid, local_ngrid, local_filestarts, MPI_ORDER_C, MPI_DOUBLE, &io_filemap);
   MPI_Type_commit(&io_filemap);
 
+  // Maps subdomain to the memory layout
   MPI_Type_create_subarray(ndim, mem_ngrid, local_ngrid, local_memstarts, MPI_ORDER_C, MPI_DOUBLE, &io_memmap);
   MPI_Type_commit(&io_memmap);
 
   MPI_File_open(MPI_COMM_WORLD, outfile, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
   MPI_File_set_view(fh, 0, MPI_DOUBLE, io_filemap, "native", MPI_INFO_NULL);
+
+  // After all the setup, collective I/O is done with a single function call.
   MPI_File_write_all(fh, &M[0][0], 1, io_memmap, MPI_STATUS_IGNORE);
 
+  // ==============================================================================================
+  // Cleanup
+  // ==============================================================================================
+
+  matrix_2d_free(M);
+  MPI_Comm_free(&cart_comm);
+  for (int i =0; i < ndim; i++)
+    MPI_Type_free(&edge[i]);
+  MPI_Type_free(&io_filemap);
+  MPI_Type_free(&io_memmap);
 
   MPI_Finalize();
 }
