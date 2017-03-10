@@ -122,8 +122,8 @@ int main(int argc, char *argv[]) {
   if (world_rank == 0) {
     // n_timesteps = (argc > 1) ? atoi(argv[2]) : 100;
     // n_io_steps  = (argc > 2) ? atoi(argv[3]) : 10;
-    n_timesteps = (argc > 1) ? atoi(argv[2]) : 1;
-    n_io_steps  = (argc > 2) ? atoi(argv[3]) : 1;
+    n_timesteps = (argc > 1) ? atoi(argv[2]) : 1000;
+    n_io_steps  = (argc > 2) ? atoi(argv[3]) : 100;
     printf("The number of timesteps is %d\n", n_timesteps);
     printf("Output will be written every %d\n", n_io_steps);
 
@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
     // Write to file
     // --------------------------------------------------------------------------------------------
 
-    if (k % n_io_steps == 0) {
+    if (n_io_steps > 0 && k % n_io_steps == 0) {
       sprintf(outfile, "jacobi_%d.out", k);
       MPI_File_open(MPI_COMM_WORLD, outfile, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
       MPI_File_set_view(fh, 0, MPI_DOUBLE, io_filemap, "native", MPI_INFO_NULL);
@@ -293,6 +293,37 @@ int main(int argc, char *argv[]) {
                    cart_comm, MPI_STATUS_IGNORE);
     }
 
+    // --------------------------------------------------------------------------------------------
+    // Solve for the next timestep
+    // --------------------------------------------------------------------------------------------
+
+    double C = alpha * time_delta / pow(grid_delta, 2);
+    for (int i = 1; i <= local_ngrid[0]; i++)
+      for (int j = 1; j <= local_ngrid[1]; j++)
+        Tnew[i][j] = Told[i][j] +  C * (Told[i-1][j] + Told[i+1][j] + Told[i][j-1] + Told[i][j+1] - 4 * Told[i][j]);
+
+    // --------------------------------------------------------------------------------------------
+    // Pointer swap
+    // --------------------------------------------------------------------------------------------
+
+    double ** temp = Tnew;
+    Tnew = Told;
+    Told = temp;
+
   }
+
+  // ==============================================================================================
+  // Cleanup
+  // ==============================================================================================
+
+  matrix_2d_free(Told);
+  matrix_2d_free(Tnew);
+  MPI_Comm_free(&cart_comm);
+  for (int i =0; i < ndim; i++)
+    MPI_Type_free(&edge[i]);
+  MPI_Type_free(&io_filemap);
+  MPI_Type_free(&io_memmap);
+
+  MPI_Finalize();
 }
 
