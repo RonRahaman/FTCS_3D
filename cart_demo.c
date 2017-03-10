@@ -257,6 +257,8 @@ int main (int argc, char *argv[]) {
   // After all the setup, collective I/O is done with a single function call.
   MPI_File_write_all(fh, &M[0][0], 1, io_memmap, MPI_STATUS_IGNORE);
 
+  MPI_File_close(&fh);
+
   // ==============================================================================================
   // Cleanup
   // ==============================================================================================
